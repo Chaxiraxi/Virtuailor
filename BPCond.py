@@ -132,7 +132,8 @@ virtual_call_addr = str(<<<start_addr>>>)  # Offset from the beginning of its se
 register_vtable = "<<<register_vtable>>>"
 offset = <<<offset>>>
 if offset == "*":
-    opnd2 = idc.print_operand(virtual_call_addr, 1)
+    call_addr = int(virtual_call_addr) + idc.get_segm_start(int(idc.get_reg_value("eip")))
+    opnd2 = idc.print_operand(call_addr, 1)
     reg_offset = 0
     place = opnd2.find('+')
     if place != -1:  # if the function is not the first in the vtable

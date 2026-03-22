@@ -12,11 +12,23 @@ REGISTERS = ['eax', 'ebx', 'ecx', 'edx', 'rax', 'rbx', 'rcx', 'rdx', 'rdi', 'rsi
              'X5', 'X6', 'X7', 'X8', 'X9', 'X10', 'X11', 'X12', 'X13', 'X14', 'X15', 'X16', 'X17', 'X18', 'X19', 'X20',
              'X21', 'X22', 'X23', 'X24', 'X25', 'X26', 'X27', 'X28', 'X29', 'X30', 'X31']
 
+# Registers that are preserved across function calls (callee-saved / non-volatile).
+# A call instruction cannot modify these, so the backward scan may safely continue
+# past a call when the tracked virtual-call register is in this set.
+CALLEE_SAVED_REGS = {
+    # x86-64 (System V and Windows x64)
+    'rbx', 'rbp', 'rdi', 'rsi', 'r12', 'r13', 'r14', 'r15',
+    # x86 (MSVC cdecl / thiscall)
+    'ebx', 'ebp', 'edi', 'esi',
+    # AArch64
+    'X19', 'X20', 'X21', 'X22', 'X23', 'X24', 'X25', 'X26', 'X27', 'X28', 'X29',
+}
+
 
 def get_processor_architecture():
     arch = "Intel"
     proc_name = ida_ida.inf_get_procname()
-    if proc_name in ("ARM", "AARCH64"):
+    if proc_name.upper() in ("ARM", "AARCH64"):
         arch = "ARM"
     if ida_ida.inf_is_64bit():
         return arch, True
@@ -88,6 +100,11 @@ def get_con2_var_or_num(i_cnt, cur_addr):
             intr_func_name = idc.print_operand(cur_addr, 0)
             # In case the code has CFG -> ignores the function call before the virtual calls
             if "guard_check_icall_fptr" not in intr_func_name:
+                # If the tracked register is callee-saved it cannot be modified by this
+                # call, so we can safely continue scanning past it.
+                if i_cnt in CALLEE_SAVED_REGS:
+                    cur_addr = idc.prev_head(cur_addr)
+                    continue
                 if "nullsub" not in intr_func_name:
                     # intr_func_name = idc.Demangle(intr_func_name, idc.GetLongPrm(idc.INF_SHORT_DN))
                     print("Warning! At address 0x%08x: The vtable assignment might be in another function (Maybe %s),"
@@ -113,7 +130,10 @@ def get_bp_condition(start_addr, register_vtable, offset):
             bp_cond_text = f1.read()
         bp_cond_text = bp_cond_text.replace("<<<start_addr>>>", str(start_addr))
         bp_cond_text = bp_cond_text.replace("<<<register_vtable>>>", register_vtable)
-        bp_cond_text = bp_cond_text.replace("<<<offset>>>", offset)
+        # When offset is the sentinel "*" it must be quoted so the emitted
+        # Python script contains  offset = "*"  not the invalid  offset = *
+        template_offset = '"*"' if offset == "*" else offset
+        bp_cond_text = bp_cond_text.replace("<<<offset>>>", template_offset)
         return bp_cond_text
     return "# Error in BP condition"
 
