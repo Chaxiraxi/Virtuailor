@@ -2,7 +2,7 @@ from __future__ import print_function
 import idc
 import idautils
 import ida_frame
-import ida_struct
+import ida_ida
 import idaapi
 import sys, os
 
@@ -15,12 +15,12 @@ REGISTERS = ['eax', 'ebx', 'ecx', 'edx', 'rax', 'rbx', 'rcx', 'rdx', 'rdi', 'rsi
 
 def get_processor_architecture():
     arch = "Intel"
-    info = idaapi.get_inf_structure()
-    if info.procName == "ARM":
+    proc_name = ida_ida.inf_get_procname()
+    if proc_name in ("ARM", "AARCH64"):
         arch = "ARM"
-    if info.is_64bit():
+    if ida_ida.inf_is_64bit():
         return arch, True
-    elif info.is_32bit():
+    elif ida_ida.inf_is_32bit_exactly():
         return arch, False
     else:
         return "Error", False
@@ -28,7 +28,7 @@ def get_processor_architecture():
 
 def get_local_var_value_64(loc_var_name):
     frame = ida_frame.get_frame(idc.here())
-    loc_var = ida_struct.get_member_by_name(frame, loc_var_name)
+    loc_var = idaapi.get_member_by_name(frame, loc_var_name)
     loc_var_start = loc_var.soff
     loc_var_ea = loc_var_start + idc.get_reg_value("RSP")
     loc_var_value = idc.read_dbg_qword(loc_var_ea)  # in case the variable is 32bit, just use get_wide_dword() instead

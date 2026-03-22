@@ -47,7 +47,6 @@ def set_values(start, end):
 if __name__ == '__main__':
     start_addr_range = ida_ida.inf_get_min_ea()  # You can change the virtual calls address range
     end_addr_range = ida_ida.inf_get_max_ea()
-    oldTo = idaapi.set_script_timeout(0)
     # Initializes the GUI: Deletes the 0x in the beginning and the L at the end:
     gui = GUI.VirtuailorBasicGUI(set_values, {'start': hex(start_addr_range)[2:], 'end': hex(end_addr_range)[2:]})
     gui.exec_()

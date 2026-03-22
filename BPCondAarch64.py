@@ -6,12 +6,12 @@
 #    * offset -> The offset of the relevant function from the vtable base pointer
 
 def make_func(ea):
-    code_err = idc.MakeCode(ea)
-    func_err= idc.MakeFunction(ea)
+    code_err = idc.create_insn(ea)
+    func_err= idc.add_func(ea)
     return code_err, func_err
 
 def fix_arm_vtable(vfunc_addr):
-    if not is_code(vfunc_addr):
+    if not idc.is_code(idc.get_full_flags(vfunc_addr)):
         code_err, func_err = make_func(vfunc_addr)
         #if code_err == 0:
             #print "Failed to create code, at", hex(vfunc_addr)
@@ -56,17 +56,26 @@ def get_vtable_and_vfunc_addr(is_brac, register_vtable, offset):
 
 def add_comment_to_struct_members(struct_id, vtable_func_offset, start_address):
      # add comment to the vtable struct members
-    cur_cmt = idc.get_member_cmt(struct_id, vtable_func_offset, 1)
-    new_cmt = ""
-    if cur_cmt:
-        if cur_cmt[:23] != "Was called from offset:":
-            new_cmt = cur_cmt
+    try:
+        struc = idaapi.get_struc(struct_id)
+        if struc is None:
+            return 0
+        member = idaapi.get_member(struc, vtable_func_offset)
+        if member is None:
+            return 0
+        cur_cmt = idc.get_member_cmt(struct_id, vtable_func_offset, 1)
+        new_cmt = ""
+        if cur_cmt:
+            if cur_cmt[:23] != "Was called from offset:":
+                new_cmt = cur_cmt
+            else:
+                new_cmt = cur_cmt + ", " + start_address
         else:
-            new_cmt = cur_cmt + ", " + start_address
-    else:
-        new_cmt = "Was called from offset: " + start_address
-    succ1 = idc.set_member_cmt(struct_id, vtable_func_offset, new_cmt, 1)
-    return  succ1
+            new_cmt = "Was called from offset: " + start_address
+        succ1 = idc.set_member_cmt(struct_id, vtable_func_offset, new_cmt, 1)
+        return succ1
+    except Exception:
+        return 0
 
 def add_all_functions_to_struct(start_address, struct_id, p_vtable_addr, offset):
     vtable_func_offset = 0
@@ -75,7 +84,7 @@ def add_all_functions_to_struct(start_address, struct_id, p_vtable_addr, offset)
     while vtable_func_value != 0:
         try:
             fix_arm_vtable(vtable_func_value)
-        except:
+        except Exception:
             pass
         v_func_name = idc.get_func_name(vtable_func_value)
         if v_func_name == '':
@@ -87,7 +96,7 @@ def add_all_functions_to_struct(start_address, struct_id, p_vtable_addr, offset)
         v_func_name = get_fixed_name_for_object(int(vtable_func_value), "vfunc_")
         idaapi.set_name(vtable_func_value, v_func_name, idaapi.SN_FORCE)
         # Add to structure
-        succ = idc.add_struc_member(struct_id, v_func_name, vtable_func_offset , FF_QWORD, -1, 8)
+        succ = idc.add_struc_member(struct_id, v_func_name, vtable_func_offset , idaapi.FF_QWORD, -1, 8)
         #if offset == vtable_func_offset:
             #add_comment_to_struct_members(struct_id, vtable_func_offset, start_address)
         vtable_func_offset += 8
@@ -96,15 +105,21 @@ def add_all_functions_to_struct(start_address, struct_id, p_vtable_addr, offset)
 
 def create_vtable_struct(start_address, vtable_name, p_vtable_addr, offset):
     struct_name = vtable_name + "_struct"
-    struct_id = add_struc(-1, struct_name, 0)
+    struct_id = idc.add_struc(-1, struct_name, 0)
     if struct_id != idc.BADADDR:
         add_all_functions_to_struct(start_address, struct_id, p_vtable_addr, offset)
-        idc.op_stroff(idautils.DecodeInstruction(int(idc.get_reg_value("pc"))), 1, struct_id, 0)
+        try:
+            idc.op_stroff(int(idc.get_reg_value("pc")), 1, struct_id, 0)
+        except Exception:
+            pass
     else:
-        struct_id = ida_struct.get_struc_id(struct_name)
+        struct_id = idaapi.get_struc_id(struct_name)
         # Checks if the struct exists, in this case the function offset will be added to the struct
         if struct_id != idc.BADADDR:
-            idc.op_stroff(idautils.DecodeInstruction(int(idc.get_reg_value("pc"))), 1, struct_id, 0)
+            try:
+                idc.op_stroff(int(idc.get_reg_value("pc")), 1, struct_id, 0)
+            except Exception:
+                pass
         else:
             print ("Failed to create struct: " +  struct_name)
 
@@ -128,7 +143,7 @@ def do_logic(virtual_call_addr, register_vtable, offset):
     # Add xref of the virtual call
     try:
         idc.add_cref(int(virtual_call_addr) , v_func_addr, idc.XREF_USER)
-    except:
+    except Exception:
         print ("Logging - xref to function at address:", hex(v_func_addr), ", from:", hex(v_func_addr))
     # create the vtable struct
     create_vtable_struct(int(virtual_call_addr), vtable_name, p_vtable_addr, offset)
@@ -158,5 +173,5 @@ if offset == "*":
             offset = opnd2[place + 1: opnd2.find(']')]
 try:
     do_logic(virtual_call_addr, register_vtable, offset)
-except:
+except Exception:
     print ("Error! at BP address:", hex(idc.get_reg_value("pc")))

@@ -46,7 +46,11 @@ class VirtuailorBasicGUI(QtWidgets.QDialog):
 
     def __init__(self, cb, defaults):
         self.values_cb = cb
-        QtWidgets.QDialog.__init__(self, None, QtCore.Qt.WindowSystemMenuHint | QtCore.Qt.WindowTitleHint)
+        try:
+            flags = QtCore.Qt.WindowType.WindowSystemMenuHint | QtCore.Qt.WindowType.WindowTitleHint
+        except AttributeError:
+            flags = QtCore.Qt.WindowSystemMenuHint | QtCore.Qt.WindowTitleHint
+        QtWidgets.QDialog.__init__(self, None, flags)
         self.populate_form(defaults)
 
     def on_button_clicked(self):
